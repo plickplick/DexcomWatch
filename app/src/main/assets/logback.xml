@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <property name="log_path" value="${EXTERNAL_STORAGE}"/>
+
+    <appender name="Logcat"
+        class="ch.qos.logback.classic.android.LogcatAppender">
+        <encoder>
+            <Pattern>%date %level %msg%n</Pattern>
+        </encoder>
+    </appender>
+
+    <appender name="File" class="ch.qos.logback.core.FileAppender">
+        <file>${log_path}/log/app.log</file>
+        <encoder>
+            <pattern>%date %level %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="DEBUG">
+        <appender-ref ref="Logcat" />
+        <appender-ref ref="File"/>
+    </root>
+
+</configuration>
