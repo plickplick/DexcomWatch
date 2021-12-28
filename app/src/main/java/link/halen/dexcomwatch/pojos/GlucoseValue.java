@@ -33,6 +33,5 @@ public class GlucoseValue {
     @JsonDeserialize(using = TrendDeSerializer.class)
     @JsonProperty("Trend")
     private Trend trend;
-
 }
 

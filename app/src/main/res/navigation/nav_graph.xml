@@ -8,7 +8,7 @@
     <fragment
         android:id="@+id/FirstFragment"
         android:name="link.halen.dexcomwatch.FirstFragment"
-        android:label="@string/first_fragment_label"
+        android:label="@string/fragment_name"
         tools:layout="@layout/fragment_first">
 
         <action

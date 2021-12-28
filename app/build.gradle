@@ -53,5 +53,8 @@ dependencies {
     implementation 'com.github.tony19:logback-android:2.0.0'
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.13.1'
     implementation group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-jsr310', version: '2.13.1'
+    implementation group: 'androidx.room', name: 'room-rxjava3', version: '2.4.0'
+    implementation group: 'androidx.room', name: 'room-runtime', version: '2.4.0'
+    annotationProcessor group: 'androidx.room', name: 'room-compiler', version: '2.4.0'
 }
 

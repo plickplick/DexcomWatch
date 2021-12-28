@@ -1,6 +1,5 @@
 package link.halen.dexcomwatch;
 
-import android.os.SystemClock;
 import android.widget.TextView;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -11,6 +10,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import link.halen.dexcomwatch.pojos.AccountIdProps;
 import link.halen.dexcomwatch.pojos.GlucoseReqProps;
@@ -25,84 +25,97 @@ import okhttp3.Response;
 
 @Slf4j
 public class GlucoseRetreiver implements Runnable {
-    private String serverUS = "share2.dexcom.com";
-    private String serverEU = "shareous1.dexcom.com";
-    private String applicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db";
-    private String agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36";
-    private String authUrl = "https://" + serverEU + "/ShareWebServices/Services/General/AuthenticatePublisherAccount";
-    private String loginUrl = "https://" + serverEU + "/ShareWebServices/Services/General/LoginPublisherAccountById";
-    private String accept = "application/json";
-    private String contentType = "application/json";
-    private String LatestGlucose = "https://" + serverEU + "/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues";
-    private String accountName = "patrik.halen";
-    private String password = "aikaiK89";
+
+    private final String serverUS = "share2.dexcom.com";
+    private final String serverEU = "shareous1.dexcom.com";
+    private final String applicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db";
+    private final String agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36";
+    private final String authUrl = "https://" + serverEU + "/ShareWebServices/Services/General/AuthenticatePublisherAccount";
+    private final String loginUrl = "https://" + serverEU + "/ShareWebServices/Services/General/LoginPublisherAccountById";
+    private final String accept = "application/json";
+    private final String contentType = "application/json";
+    private final String LatestGlucose = "https://" + serverEU + "/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues";
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private String accountName;
+    private String password;
     private TextView textView;
     private String sessionId;
+
 
     public GlucoseRetreiver(TextView textView) {
         this.textView = textView;
     }
 
+    public void setAccountName(String accountName) {
+        sessionId = null;
+        this.accountName = accountName;
+    }
+
+    public void setPassword(String password) {
+        sessionId = null;
+        this.password = password;
+    }
+
     @Override
     public void run() {
-        getGlucose();
-    }
-
-    private void getGlucose() {
-        if (sessionId == null) {
-            sessionId = authorize();
-        }
-        try {
-            //String url = LatestGlucose + "?" + payloadGlucose(sessionId);
-            //log.info("Glucose url: " + url);
-            OkHttpClient client = new OkHttpClient();
-            Request request = new Request.Builder()
-                    .url(LatestGlucose)
-                    .addHeader("Content-Type", contentType)
-                    .addHeader("User-Agent", agent)
-                    .addHeader("Accept", accept)
-                    .post(RequestBody.create(payloadGlucose(sessionId), MediaType.get("application/json; charset=utf-8")))
-                    .build();
-            Response response = client.newCall(request).execute();
-            if (response.code() > 399) {
-                sessionId = null;
-                getGlucose();
+        running.set(true);
+        stopped.set(false);
+        while (running.get()) {
+            if (sessionId == null) {
+                sessionId = authorize();
             }
-            String glucose = response.body().string();
-            log.info("Glucose: " + glucose);
-            ObjectMapper objectMapper = new ObjectMapper();
-            objectMapper.registerModule(new JavaTimeModule());
-            List<GlucoseValue> glucoseValue = objectMapper.readValue(glucose, new TypeReference<ArrayList<GlucoseValue>>() {
-            });
-            glucoseValue.forEach(g -> {
-                log.info("Object: " + g);
-                textView.post(() -> textView.setText(g.getValue()));
-            });
-            long duration = calculateDurationNextExecution(glucoseValue.get(0));
-            log.info("Time in millis to next call: " + duration);
-            SystemClock.sleep(duration);
-            getGlucose();
-        } catch (Exception e) {
-            log.error("Not being able to retreive glucose: " + e.getMessage());
+            try {
+                OkHttpClient client = new OkHttpClient();
+                Request request = new Request.Builder()
+                        .url(LatestGlucose)
+                        .addHeader("Content-Type", contentType)
+                        .addHeader("User-Agent", agent)
+                        .addHeader("Accept", accept)
+                        .post(RequestBody.create(payloadGlucose(sessionId), MediaType.get("application/json; charset=utf-8")))
+                        .build();
+                Response response = client.newCall(request).execute();
+                if (response.code() > 399) {
+                    sessionId = null;
+                    break;
+                }
+                String glucose = response.body().string();
+                log.info("Glucose: " + glucose);
+                ObjectMapper objectMapper = new ObjectMapper();
+                objectMapper.registerModule(new JavaTimeModule());
+                List<GlucoseValue> glucoseValue = objectMapper.readValue(glucose, new TypeReference<ArrayList<GlucoseValue>>() {
+                });
+                glucoseValue.forEach(g -> {
+                    log.info("Object: " + g);
+                    textView.post(() -> textView.setText(g.getValue()));
+                });
+                long duration = calculateDurationNextExecution(glucoseValue.get(0));
+                log.info("Time in millis to next call: " + duration);
+                Thread.sleep(duration);
+                break;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("stopped retreiving data.");
+            } catch (Exception ex) {
+                log.error("Not being able to retreive glucose: " + ex.getMessage());
+            }
         }
-        getGlucose();
+        stopped.set(true);
     }
-//            HttpClient client = HttpClients.custom().build();
-//            HttpUriRequest request = RequestBuilder.post()
-//                    .setUri(new URI(LatestGlucose))
-//                    .setHeader(HttpHeaders.CONTENT_TYPE, contentType)
-//                    .setHeader(HttpHeaders.USER_AGENT, agent)
-//                    .setHeader(HttpHeaders.ACCEPT, accept)
-//                    .setEntity(new StringEntity(payloadGlucose(sessionId), contentType, "UTF-8"))
-//                    .build();
-//            HttpResponse response = client.execute(request);
-//            if (response.getStatusLine().getStatusCode() > 399) {
-//                sessionId = null;
-//                getGlucose();
-//            }
-//            String glucose = EntityUtils.toString(response.getEntity());
-//            log.info("Glucose: " + glucose);
 
+
+    public void interrupt() {
+        running.set(false);
+        this.interrupt();
+    }
+
+    boolean isRunning() {
+        return running.get();
+    }
+
+    boolean isStopped() {
+        return stopped.get();
+    }
 
     private long calculateDurationNextExecution(GlucoseValue glucoseValue) {
         long oldTime = glucoseValue.getWt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -171,7 +184,6 @@ public class GlucoseRetreiver implements Runnable {
         String json = objectMapper.writeValueAsString(accountId);
         log.info("AccountId Props: " + json);
         return json;
-        //return "{\"password\": " + "\"" + password + "\"" + ", \"applicationId\": " + "\"" + applicationId + "\"" + ", \"accountName\": " + "\"" + accountName + "\"" + "}";
     }
 
     private String payloadLogin(String accountId) throws JsonProcessingException {
